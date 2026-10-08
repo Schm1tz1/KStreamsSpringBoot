@@ -159,6 +159,15 @@ class TransactionTimeoutIT {
         0.0, metric("kafka_producer_txn_abort_time_ns_total"), CLIENT + " no client-side abort");
     // ...but the broker saw it: requests of the timed-out producer were rejected as fenced.
     assertTrue(brokerFencingErrors() > brokerFencingBefore, BROKER + " rejected fenced producer");
+    // The time was spent processing, not committing: process-latency-max shows the block, while
+    // commit-latency-max stays below transaction.timeout.ms (the commit did not cause the timeout).
+    // Bound is the full timeout, not the 25% alert threshold: margin for slow CI machines.
+    assertTrue(
+        threadMetric("process-latency-max") >= BLOCK_MS_BY_VALUE.get("slow"),
+        CLIENT + " process-latency-max shows the block");
+    assertTrue(
+        threadMetric("commit-latency-max") < TRANSACTION_TIMEOUT_MS,
+        CLIENT + " commit-latency-max does not see the timeout");
   }
 
   @Test
@@ -199,6 +208,9 @@ class TransactionTimeoutIT {
     assertTrue(metric("kafka_stream_thread_commit_total") > commitsBefore, CLIENT + " committed");
     assertEquals(brokerFencingBefore, brokerFencingErrors(), BROKER + " no fencing");
     assertTrue(brokerRequests("EndTxn") > brokerEndTxnBefore, BROKER + " received EndTxn");
+    assertTrue(
+        threadMetric("commit-latency-max") < TRANSACTION_TIMEOUT_MS,
+        CLIENT + " commit-latency-max below transaction.timeout.ms");
   }
 
   private void logMetrics(String when) {
@@ -215,7 +227,19 @@ class TransactionTimeoutIT {
         MetricsReport.client(
             scrape,
             "kafka.streams:type=stream-thread-metrics,thread-id=*",
-            a -> a.equals("commit-total") || a.equals("task-closed-total")));
+            a ->
+                a.equals("commit-total")
+                    || a.equals("task-closed-total")
+                    || a.startsWith("commit-latency-")
+                    || a.startsWith("process-latency-")));
+  }
+
+  /** Live stream-thread metric from JMX (no Micrometer refresh delay), max over all threads. */
+  private static double threadMetric(String attribute) {
+    return MetricsReport.query("kafka.streams:type=stream-thread-metrics,thread-id=*").stream()
+        .mapToDouble(n -> ((Number) MetricsReport.attribute(n, attribute)).doubleValue())
+        .max()
+        .orElse(Double.NaN);
   }
 
   private double metric(String name) {
@@ -263,6 +287,20 @@ class TransactionTimeoutIT {
         String label = "errors " + n.getKeyProperty("request") + "/" + n.getKeyProperty("error");
         sb.append(MetricsReport.broker(label, n, "Count"));
       }
+    }
+    for (String request : List.of("AddPartitionsToTxn", "AddOffsetsToTxn", "EndTxn")) {
+      for (ObjectName n :
+          MetricsReport.query(
+              "kafka.network:type=RequestMetrics,name=TotalTimeMs,request=" + request)) {
+        sb.append(MetricsReport.broker("total time ms " + request + " max", n, "Max"));
+        sb.append(MetricsReport.broker("total time ms " + request + " p99", n, "99thPercentile"));
+      }
+    }
+    for (ObjectName n : MetricsReport.query("kafka.server:type=transaction-coordinator-metrics")) {
+      sb.append(
+          MetricsReport.broker("coordinator partition load ms max", n, "partition-load-time-max"));
+      sb.append(
+          MetricsReport.broker("coordinator partition load ms avg", n, "partition-load-time-avg"));
     }
     for (String name : List.of("PartitionsWithLateTransactionsCount", "ProducerIdCount")) {
       for (ObjectName n : MetricsReport.query("kafka.server:type=ReplicaManager,name=" + name)) {
