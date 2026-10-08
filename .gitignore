@@ -16,3 +16,7 @@ target/
 # Logs and local overrides (e.g. a mounted application.yml with credentials)
 *.log
 config/
+
+# Local-only: Maven settings override for internal mirrors, Claude Code instructions
+.mvn/
+CLAUDE.md
