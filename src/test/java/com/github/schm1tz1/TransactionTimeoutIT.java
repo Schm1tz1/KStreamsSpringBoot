@@ -51,8 +51,9 @@ import org.springframework.test.annotation.DirtiesContext;
  *   <li>"fast": well below transaction.timeout.ms. The transaction commits normally, no fencing.
  * </ul>
  */
-// close app + embedded broker after the class: both IT classes run in one JVM and share JMX
-@DirtiesContext
+// fresh app + embedded broker per test: broker metrics start at 0, and all IT classes share one
+// JVM (and its JMX)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @AutoConfigureObservability(tracing = false)
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -286,6 +287,12 @@ class TransactionTimeoutIT {
       if (TXN_REQUESTS.contains(n.getKeyProperty("request"))
           && !"NONE".equals(n.getKeyProperty("error"))) {
         String label = "errors " + n.getKeyProperty("request") + "/" + n.getKeyProperty("error");
+        if ("COORDINATOR_LOAD_IN_PROGRESS".equals(n.getKeyProperty("error"))
+            && "InitProducerId".equals(n.getKeyProperty("request"))) {
+          // KRaft: a fresh broker has no producer id block from the controller yet, the first
+          // InitProducerId is answered "Waiting for next block" and retried by the client
+          label += " (expected once per fresh broker: no producer id block yet, retried)";
+        }
         sb.append(MetricsReport.broker(label, n, "Count"));
       }
     }

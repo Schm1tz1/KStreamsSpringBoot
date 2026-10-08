@@ -22,8 +22,9 @@ import org.springframework.test.annotation.DirtiesContext;
  * metrics visible to Prometheus.
  */
 // @SpringBootTest disables metrics export (and so /actuator/prometheus) unless this is present
-// close app + embedded broker after the class: both IT classes run in one JVM and share JMX
-@DirtiesContext
+// fresh app + embedded broker per test: broker metrics start at 0, and all IT classes share one
+// JVM (and its JMX)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @AutoConfigureObservability(tracing = false)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @EmbeddedKafka(
