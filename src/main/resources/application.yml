@@ -1,0 +1,38 @@
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    streams:
+      application-id: kstreams-spring-boot
+      properties:
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        auto.offset.reset: earliest
+        # EOS v2: one transactional producer per stream thread; needs brokers >= 2.5 and, on
+        # single-broker dev clusters, transaction.state.log.replication.factor=1 on the broker
+        processing.guarantee: exactly_once_v2
+        # replication.factor: 3
+    producer:
+      acks: all
+    # Security (e.g. Confluent Cloud) - applies to streams and producer:
+    # properties:
+    #   security.protocol: SASL_SSL
+    #   sasl.mechanism: PLAIN
+    #   sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="<key>" password="<secret>";
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,kafkaStreams
+
+streamsApp:
+  inputTopic: input-topic
+  outputTopic: output-topic

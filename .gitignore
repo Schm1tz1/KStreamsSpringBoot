@@ -1,0 +1,18 @@
+# Maven build output (fat jar, jib-image.tar, test reports)
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+
+# OS
+.DS_Store
+
+# Logs and local overrides (e.g. a mounted application.yml with credentials)
+*.log
+config/
