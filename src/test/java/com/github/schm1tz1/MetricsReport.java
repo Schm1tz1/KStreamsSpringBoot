@@ -38,12 +38,16 @@ final class MetricsReport {
           continue;
         }
         String series = ("kafka_" + group + "_" + a.getName()).replace('-', '_');
+        String line = scrapedLine(scrape, series, id);
         sb.append("\n  ")
-            .append(series)
+            .append(line == null ? series : line.substring(0, line.indexOf('{')))
             .append('{')
             .append(id.replaceFirst(".*?(StreamThread-.*)", "$1"))
             .append("} = ")
-            .append(scrapedValue(scrape, series, id))
+            .append(
+                line == null
+                    ? "<not in /actuator/prometheus yet>"
+                    : line.substring(line.lastIndexOf(' ') + 1))
             .append("\n    JMX ")
             .append(n)
             .append(" / ")
@@ -89,12 +93,16 @@ final class MetricsReport {
     }
   }
 
-  private static String scrapedValue(String scrape, String series, String id) {
+  /** The scraped line of the series for this client/thread id, or null if not (yet) exported. */
+  private static String scrapedLine(String scrape, String series, String id) {
     return scrape
         .lines()
-        .filter(l -> l.startsWith(series + "{") && l.contains("\"" + id + "\""))
-        .map(l -> l.substring(l.lastIndexOf(' ') + 1))
+        // counters without a "-total" attribute suffix get Prometheus' "_total" appended
+        .filter(
+            l ->
+                (l.startsWith(series + "{") || l.startsWith(series + "_total{"))
+                    && l.contains("\"" + id + "\""))
         .findFirst()
-        .orElse("<not in /actuator/prometheus yet>");
+        .orElse(null);
   }
 }

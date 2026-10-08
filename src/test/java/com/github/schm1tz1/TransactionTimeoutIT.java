@@ -159,7 +159,8 @@ class TransactionTimeoutIT {
         0.0, metric("kafka_producer_txn_abort_time_ns_total"), CLIENT + " no client-side abort");
     // ...but the broker saw it: requests of the timed-out producer were rejected as fenced.
     assertTrue(brokerFencingErrors() > brokerFencingBefore, BROKER + " rejected fenced producer");
-    // The time was spent processing, not committing: process-latency-max shows the block, while
+    // The time was spent processing, not committing: process-latency-max (per-record average of a
+    // loop iteration; here one record per iteration) shows the block, while
     // commit-latency-max stays below transaction.timeout.ms (the commit did not cause the timeout).
     // Bound is the full timeout, not the 25% alert threshold: margin for slow CI machines.
     assertTrue(
@@ -310,8 +311,17 @@ class TransactionTimeoutIT {
     logger.info("{} transaction metrics:{}", BROKER, sb);
   }
 
-  /** Matching values on SLOW_OUTPUT, read from the beginning with a fresh consumer group. */
   private List<String> read(String isolationLevel, String value, Duration pollFor) {
+    return read(bootstrapServers, SLOW_OUTPUT, isolationLevel, value, pollFor);
+  }
+
+  /** Matching values on a topic, read from the beginning with a fresh consumer group. */
+  static List<String> read(
+      String bootstrapServers,
+      String topic,
+      String isolationLevel,
+      String value,
+      Duration pollFor) {
     Map<String, Object> props =
         Map.of(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -328,7 +338,7 @@ class TransactionTimeoutIT {
             StringDeserializer.class);
     List<String> values = new ArrayList<>();
     try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-      consumer.subscribe(List.of(SLOW_OUTPUT));
+      consumer.subscribe(List.of(topic));
       Instant deadline = Instant.now().plus(pollFor);
       while (Instant.now().isBefore(deadline)) {
         for (ConsumerRecord<String, String> r : consumer.poll(Duration.ofMillis(200))) {

@@ -36,3 +36,7 @@ management:
 streamsApp:
   inputTopic: input-topic
   outputTopic: output-topic
+  # REPLACE_THREAD | SHUTDOWN_CLIENT (Kafka's default without a handler) | SHUTDOWN_APPLICATION.
+  # REPLACE_THREAD aborts the open transaction and reprocesses: a poison pill that fails every
+  # time loops forever (watch failed-stream-threads), handle such records in the processor.
+  uncaughtExceptionResponse: REPLACE_THREAD
